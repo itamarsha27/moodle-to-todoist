@@ -1,0 +1,81 @@
+name: Sync Moodle → Todoist
+
+on:
+  schedule:
+    # GitHub cron runs in UTC. Israel is UTC+2 in winter and UTC+3 in summer, so
+    # this fires at 07:00 and 08:00 UTC, and the "time gate" step below lets
+    # only the run that lands at 10:xx Israel time continue.
+    - cron: "0 7 * * *"
+    - cron: "0 8 * * *"
+  workflow_dispatch:              # "Run workflow" button: always runs, any time
+
+permissions:
+  contents: write                 # to commit data/synced_tasks.json
+
+concurrency:
+  group: moodle-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Jerusalem' }}
+      RUN_HOUR: ${{ vars.RUN_HOUR || '10' }}
+    steps:
+      - name: Time gate and setup check
+        id: gate
+        env:
+          HAS_MOODLE: ${{ secrets.MOODLE_ICAL_URL != '' }}
+          HAS_TODOIST: ${{ secrets.TODOIST_API_TOKEN != '' }}
+        run: |
+          if [ "$HAS_MOODLE" != "true" ] || [ "$HAS_TODOIST" != "true" ]; then
+            echo "::notice title=Not set up yet::Add the MOODLE_ICAL_URL and TODOIST_API_TOKEN secrets (Settings → Secrets and variables → Actions), then click Run workflow. See README."
+            echo "### ⚙️ Not set up yet: add the two secrets described in the README, then run again." >> "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hour=$(TZ="$TIMEZONE" date +%H)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$((10#$hour))" -eq "$RUN_HOUR" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "It's ${hour}:xx in $TIMEZONE; the other scheduled run handles today."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.go == 'true'
+
+      - uses: actions/setup-python@v6
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Run tests
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          pip install -q -r requirements-dev.txt
+          python -m pytest -q
+
+      - name: Sync
+        if: steps.gate.outputs.go == 'true'
+        env:
+          MOODLE_ICAL_URL: ${{ secrets.MOODLE_ICAL_URL }}
+          TODOIST_API_TOKEN: ${{ secrets.TODOIST_API_TOKEN }}
+          TODOIST_PROJECT: ${{ vars.TODOIST_PROJECT || 'University' }}
+          HORIZON_DAYS: ${{ vars.HORIZON_DAYS || '60' }}
+        run: python -m moodle_sync
+
+      - name: Save sync state
+        if: always() && steps.gate.outputs.go == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "State unchanged."
+          else
+            git commit -m "sync: update Moodle → Todoist state"
+            git push
+          fi
