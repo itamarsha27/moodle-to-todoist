@@ -198,3 +198,40 @@ def test_manual_section_move_is_respected(server, tasks, tmp_path):
     f.tasks[tid]["section_id"] = other                    # the user drags it elsewhere
     report, _ = _sync(server, tasks, tmp_path / "s.json")
     assert report.moved_section == 0 and f.tasks[tid]["section_id"] == other
+
+
+def _label_colors(fake):
+    return {lab["name"]: lab["color"] for lab in fake.labels.values()}
+
+
+def test_course_labels_get_distinct_colors(server, tasks, tmp_path):
+    _sync(server, tasks, tmp_path / "s.json")
+    colors = _label_colors(server.fake)
+    course = {k: v for k, v in colors.items() if k != "moodle"}
+    assert len(course) == 3 and len(set(course.values())) == 3       # all different
+    assert "charcoal" not in course.values()
+    assert colors["moodle"] == "charcoal"                              # sync label left plain
+
+
+def test_existing_grey_labels_get_colored_but_user_colors_are_kept(server, tasks, tmp_path, monkeypatch):
+    from moodle_sync.sync import label_for_course
+    f = server.fake
+    # Labels exist from an older version (default color); the user already picked one of them.
+    for name, color in [("Data_Structures", "charcoal"), ("Linear_Systems", "red"), ("236350-W26", "charcoal")]:
+        lid = f.new_id()
+        f.labels[lid] = {"id": lid, "name": name, "color": color}
+    _sync(server, tasks, tmp_path / "s.json")
+    colors = _label_colors(f)
+    assert colors["Linear_Systems"] == "red"                           # user's choice untouched
+    assert colors["Data_Structures"] != "charcoal" and colors["236350-W26"] != "charcoal"
+    assert len({colors["Data_Structures"], colors["236350-W26"], "red"}) == 3   # no clash with red
+
+    # Pinned in rules.py → applied even over the user's color.
+    monkeypatch.setattr(rules, "COURSE_COLORS", {"Linear Systems": "teal"})
+    _sync(server, tasks, tmp_path / "s.json")
+    assert _label_colors(f)["Linear_Systems"] == "teal"
+
+    # And stable: another run writes nothing to labels.
+    calls = len(f.calls)
+    _sync(server, tasks, tmp_path / "s.json")
+    assert not [c for c in f.calls[calls:] if c[0] == "POST" and c[1].startswith("/labels")]

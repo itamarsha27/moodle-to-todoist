@@ -134,9 +134,14 @@ def _handler(fake: FakeTodoist):
                 fake.sections[s["id"]] = s
                 return s
             if path == "/labels":
-                lab = {"id": fake.new_id(), "name": body["name"]}
+                lab = {"id": fake.new_id(), "name": body["name"], "color": body.get("color", "charcoal")}
                 fake.labels[lab["id"]] = lab
                 return lab
+            m = re.fullmatch(r"/labels/(\d+)", path)
+            if m and m.group(1) in fake.labels:
+                assert set(body) == {"color"}
+                fake.labels[m.group(1)].update(body)
+                return fake.labels[m.group(1)]
             if path == "/tasks":
                 assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", body["due_datetime"])
                 t = {"id": fake.new_id(), "checked": False, "is_deleted": False, "section_id": None, **body}

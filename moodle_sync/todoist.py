@@ -19,6 +19,12 @@ from typing import Any, Iterator
 log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.todoist.com/api/v1"
+DEFAULT_COLOR = "charcoal"  # what Todoist gives a label when no color is chosen
+# All colors the Todoist API accepts.
+TODOIST_COLORS = (
+    "berry_red", "red", "orange", "yellow", "olive_green", "lime_green", "green", "mint_green", "teal",
+    "sky_blue", "light_blue", "blue", "grape", "violet", "lavender", "magenta", "salmon", "charcoal", "grey", "taupe",
+)
 
 
 class TodoistError(RuntimeError):
@@ -107,13 +113,33 @@ class TodoistClient:
             existing[name] = str(self._request("POST", "/sections", body={"name": name, "project_id": project_id})["id"])
         return existing
 
-    def ensure_labels(self, names: set[str]) -> dict[str, str]:
-        """Create missing labels; return {name: id} for ALL personal labels."""
-        existing = {lab["name"]: str(lab["id"]) for lab in self._paginate("/labels")}
-        for name in sorted(names - existing.keys()):
-            log.info("Creating label %r", name)
-            existing[name] = str(self._request("POST", "/labels", body={"name": name})["id"])
-        return existing
+    def ensure_labels(self, names: set[str], colors: dict[str, str] | None = None) -> dict[str, str]:
+        """Create missing labels and apply colors; return {name: id} for ALL personal labels.
+
+        `colors` maps label name → desired color. An existing label's color is
+        only changed if it still has Todoist's default color, so colors you
+        picked yourself in Todoist are never overwritten. `colors` entries
+        marked with a leading "!" (from COURSE_COLORS) are always applied.
+        """
+        colors = colors or {}
+        labels = {lab["name"]: lab for lab in self._paginate("/labels")}
+        for name in sorted(names):
+            want = colors.get(name)
+            forced = bool(want and want.startswith("!"))
+            want = want.lstrip("!") if want else None
+            lab = labels.get(name)
+            if lab is None:
+                log.info("Creating label %r%s", name, f" ({want})" if want else "")
+                body = {"name": name, **({"color": want} if want else {})}
+                labels[name] = self._request("POST", "/labels", body=body)
+            elif want and lab.get("color") != want and (forced or lab.get("color") in (None, DEFAULT_COLOR)):
+                log.info("Coloring label %r → %s", name, want)
+                self._request("POST", f"/labels/{lab['id']}", body={"color": want})
+                lab["color"] = want
+        return {n: str(lab["id"]) for n, lab in labels.items()}
+
+    def label_colors(self) -> dict[str, str]:
+        return {lab["name"]: lab.get("color") or DEFAULT_COLOR for lab in self._paginate("/labels")}
 
     def active_tasks_with_label(self, label: str) -> list[dict]:
         return list(self._paginate("/tasks", {"label": label}))

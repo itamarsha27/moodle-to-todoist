@@ -35,6 +35,24 @@ COURSE_NAME_CLEANUP: list[str] = [
     r"\s+[-–—:|]\s*\d[\d\-.]{3,}\s*$",     # trailing code: "Name - 0368215899"
 ]
 
+# Label colors per course (each task shows its course label as a colored tag).
+# Courses not listed here get a distinct color automatically from COLOR_PALETTE.
+# A color you pick for a label inside Todoist is never overwritten, unless the
+# course is pinned here. Allowed: berry_red red orange yellow olive_green
+# lime_green green mint_green teal sky_blue light_blue blue grape violet
+# lavender magenta salmon charcoal grey taupe
+COURSE_COLORS: dict[str, str] = {
+    # "Data Structures": "blue",
+    # "מבני נתונים": "green",
+}
+
+# Order in which automatic colors are handed out (most distinct first).
+COLOR_PALETTE: list[str] = [
+    "blue", "red", "green", "orange", "grape", "teal", "magenta", "yellow",
+    "sky_blue", "olive_green", "salmon", "violet", "lime_green", "berry_red",
+    "mint_green", "lavender", "light_blue", "taupe",
+]
+
 # Courses to ignore entirely (raw short name or clean name).
 IGNORED_COURSES: set[str] = {
     # "Library Orientation",

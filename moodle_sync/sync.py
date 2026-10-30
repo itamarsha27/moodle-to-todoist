@@ -27,7 +27,8 @@ from datetime import datetime, timezone
 
 from .models import Task
 from .state import StateStore
-from .todoist import TodoistClient
+from . import rules
+from .todoist import DEFAULT_COLOR, TodoistClient
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,27 @@ class SyncReport:
 def label_for_course(course: str) -> str:
     # Todoist labels can't usefully contain spaces (they break @quick-add), and some symbols are rejected.
     return re.sub(r"[\s@#,!*\"'()\[\]]+", "_", course).strip("_")[:60] or "course"
+
+
+def plan_label_colors(courses: set[str], current: dict[str, str]) -> dict[str, str]:
+    """Pick a color for each course label.
+
+    * pinned in rules.COURSE_COLORS → that color, always applied (prefixed "!")
+    * label already has a non-default color (yours or ours) → keep it
+    * otherwise → the first palette color no other course label is using
+    """
+    plan: dict[str, str] = {}
+    labels = {label_for_course(c): c for c in courses}
+    used = {current[lab] for lab in labels if current.get(lab, DEFAULT_COLOR) != DEFAULT_COLOR}
+    used |= {rules.COURSE_COLORS[c] for c in courses if c in rules.COURSE_COLORS}
+    for lab, course in sorted(labels.items()):
+        if course in rules.COURSE_COLORS:
+            plan[lab] = "!" + rules.COURSE_COLORS[course]
+        elif current.get(lab, DEFAULT_COLOR) == DEFAULT_COLOR:
+            free = [c for c in rules.COLOR_PALETTE if c not in used] or rules.COLOR_PALETTE
+            plan[lab] = free[0]
+            used.add(free[0])
+    return plan
 
 
 def _fmt(dt: datetime) -> str:
@@ -140,7 +162,8 @@ def run_sync(
     project_id = client.ensure_project(cfg.project)
     sections = client.ensure_sections(project_id, {t.course for t in tasks}) if cfg.course_sections else {}
     wanted_labels = {cfg.sync_label} | ({label_for_course(t.course) for t in tasks} if cfg.course_labels else set())
-    label_ids = client.ensure_labels(wanted_labels)
+    colors = plan_label_colors({t.course for t in tasks}, client.label_colors()) if cfg.course_labels else {}
+    label_ids = client.ensure_labels(wanted_labels, colors)
 
     active = client.active_tasks_with_label(cfg.sync_label)
     active_ids = {str(a["id"]): a for a in active}
