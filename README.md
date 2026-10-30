@@ -11,7 +11,7 @@ Works with any university's Moodle, in Hebrew or English.
 Moodle calendar ──► GitHub (every day at 10:00) ──► Todoist: phone, iPad widget, Windows, Mac, web
 ```
 
-**What it looks like in Todoist:** a project called **University**, with one section per course:
+**What it looks like in Todoist:** a project called **University**, with one section and one **colored label** per course:
 
 * 🎓 `Linear Systems: Midterm`: exams, red priority
 * 🧠 `Software 1: Lecture 3 Quiz`: quizzes
@@ -104,6 +104,10 @@ COURSE_MAP = {
 }
 ```
 Existing tasks move to the renamed section automatically on the next run.
+
+**I want different colors.** Every course label gets its own color automatically.
+To change one, do it in Todoist (**Labels** → ⋯ → **Edit** → color); the sync never
+overrides your choice. Or pin colors in `COURSE_COLORS` in `moodle_sync/rules.py`.
 
 **Different time or timezone?** Repo **Settings → Secrets and variables → Actions →
 Variables** tab → add `RUN_HOUR` (e.g. `8`) and/or `TIMEZONE` (e.g. `Europe/London`).
