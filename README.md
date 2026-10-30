@@ -17,7 +17,7 @@ Moodle calendar ──► GitHub (every day at 10:00) ──► Todoist: phone, 
 * 🧠 `Software 1: Lecture 3 Quiz`: quizzes
 * 📝 `Data Structures: תרגיל בית 2`: assignments
 
-**Cost:** free. Todoist's free plan is enough, and the daily run uses about 3%
+**Cost:** free. Todoist's free plan is enough, and the daily runs use under 10%
 of GitHub's free monthly allowance. GitHub won't charge you unless you add a
 payment method *and* raise your spending limit.
 
@@ -65,7 +65,7 @@ In **your** repository: **Settings → Secrets and variables → Actions → New
 **Sync Moodle → Todoist** (left) → **Run workflow** → **Run workflow**.
 
 After about a minute the run turns green ✅ and your deadlines are in Todoist. 🎉
-From now on it runs **every day at 10:00 (Israel time)** by itself.
+From now on it syncs **every morning after 10:00 (Israel time)** by itself.
 
 ### 6. Recommended extras
 
@@ -79,8 +79,10 @@ From now on it runs **every day at 10:00 (Israel time)** by itself.
 ## FAQ
 
 **How do I know it's running?**
-The **Actions** tab shows two *Scheduled* runs each morning. One syncs and the other
-skips on purpose; that's how 10:00 survives daylight-saving changes. Both should be green.
+GitHub "checks in" 5 times a day. The first check-in after 10:00 syncs, and the rest
+finish in seconds with "Already synced today". All should be green ✅. GitHub's scheduler
+is best-effort, so on busy days the sync can happen later than 10:00, but it still happens
+that day. `data/last_sync.txt` in your copy shows the last day it synced.
 To sync right now, click **Run workflow** anytime. Running it extra times is always safe.
 
 **Will it create duplicates?** No. Re-runs change nothing. If a lecturer moves a deadline,

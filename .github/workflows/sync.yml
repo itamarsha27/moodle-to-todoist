@@ -2,15 +2,20 @@ name: Sync Moodle → Todoist
 
 on:
   schedule:
-    # GitHub cron runs in UTC. Israel is UTC+2 in winter and UTC+3 in summer, so
-    # this fires at 07:00 and 08:00 UTC, and the "time gate" step below lets
-    # only the run that lands at 10:xx Israel time continue.
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
-  workflow_dispatch:              # "Run workflow" button: always runs, any time
+    # GitHub's scheduler is best-effort: runs often start late, sometimes by hours.
+    # So instead of one exact time, GitHub "checks in" several times a day (UTC),
+    # and the gate below syncs on the FIRST check-in at/after RUN_HOUR (default
+    # 10:00 Israel time) that hasn't synced yet today. Later check-ins skip in seconds.
+    # Minute :23 avoids the top-of-hour rush, when GitHub delays runs the most.
+    - cron: "23 7 * * *"     # 09:23 / 10:23 Israel (winter / summer)
+    - cron: "23 8 * * *"     # 10:23 / 11:23
+    - cron: "23 10 * * *"    # backups, in case earlier runs were late, skipped or failed
+    - cron: "23 13 * * *"
+    - cron: "23 17 * * *"
+  workflow_dispatch:          # "Run workflow" button: always syncs, any time
 
 permissions:
-  contents: write                 # to commit data/synced_tasks.json
+  contents: write             # to commit the sync state in data/
 
 concurrency:
   group: moodle-sync
@@ -24,28 +29,34 @@ jobs:
       TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Jerusalem' }}
       RUN_HOUR: ${{ vars.RUN_HOUR || '10' }}
     steps:
-      - name: Time gate and setup check
+      - uses: actions/checkout@v5
+
+      - name: Gate (set up? past RUN_HOUR? already synced today?)
         id: gate
         env:
           HAS_MOODLE: ${{ secrets.MOODLE_ICAL_URL != '' }}
           HAS_TODOIST: ${{ secrets.TODOIST_API_TOKEN != '' }}
+          EVENT: ${{ github.event_name }}
         run: |
           if [ "$HAS_MOODLE" != "true" ] || [ "$HAS_TODOIST" != "true" ]; then
             echo "::notice title=Not set up yet::Add the MOODLE_ICAL_URL and TODOIST_API_TOKEN secrets (Settings → Secrets and variables → Actions), then click Run workflow. See README."
             echo "### ⚙️ Not set up yet: add the two secrets described in the README, then run again." >> "$GITHUB_STEP_SUMMARY"
-            echo "go=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          today=$(TZ="$TIMEZONE" date +%F)
           hour=$(TZ="$TIMEZONE" date +%H)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$((10#$hour))" -eq "$RUN_HOUR" ]; then
-            echo "go=true" >> "$GITHUB_OUTPUT"
+          last=$(cat data/last_sync.txt 2>/dev/null || echo never)
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "Manual run: syncing."; go=true
+          elif [ "$last" = "$today" ]; then
+            echo "Already synced today ($today). Nothing to do."; go=false
+          elif [ "$((10#$hour))" -lt "$RUN_HOUR" ]; then
+            echo "It's ${hour}:xx in $TIMEZONE, before ${RUN_HOUR}:00. A later check-in will sync."; go=false
           else
-            echo "It's ${hour}:xx in $TIMEZONE; the other scheduled run handles today."
-            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "First check-in after ${RUN_HOUR}:00 today (last sync: $last). Syncing."; go=true
           fi
-
-      - uses: actions/checkout@v5
-        if: steps.gate.outputs.go == 'true'
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "today=$today" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v6
         if: steps.gate.outputs.go == 'true'
@@ -65,7 +76,10 @@ jobs:
           TODOIST_API_TOKEN: ${{ secrets.TODOIST_API_TOKEN }}
           TODOIST_PROJECT: ${{ vars.TODOIST_PROJECT || 'University' }}
           HORIZON_DAYS: ${{ vars.HORIZON_DAYS || '60' }}
-        run: python -m moodle_sync
+        run: |
+          python -m moodle_sync
+          # Only a successful sync counts for the day; a failure is retried at the next check-in.
+          echo "${{ steps.gate.outputs.today }}" > data/last_sync.txt
 
       - name: Save sync state
         if: always() && steps.gate.outputs.go == 'true'
@@ -76,6 +90,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "State unchanged."
           else
-            git commit -m "sync: update Moodle → Todoist state"
+            git commit -m "sync: $(cat data/last_sync.txt 2>/dev/null || echo state)"
+            git pull --rebase --quiet || true
             git push
           fi
