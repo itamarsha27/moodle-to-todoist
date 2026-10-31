@@ -46,6 +46,20 @@ def _inspect(events, now, settings) -> None:
         print(f'    "{raw}": "{resolve_course(raw)}",')
 
 
+def _feed_reach(events, now, settings) -> str:
+    """How far ahead Moodle's export actually reaches (set by the university, not by us)."""
+    future = [e.due for e in events if e.due >= now]
+    if not future:
+        return "- Moodle sent no upcoming events"
+    last = max(future)
+    days = (last - now).days
+    note = ""
+    if days > settings.horizon_days:
+        note = f" (beyond the {settings.horizon_days}-day limit; raise the HORIZON_DAYS variable to include it)"
+    return (f"- Moodle sent {len(events)} events; the furthest is on **{last:%d/%m/%Y}**, "
+            f"{days} days ahead{note}")
+
+
 def _decision_table(events, now, settings) -> list[str]:
     """Every Moodle event and why it was kept/dropped, for the GitHub run summary."""
     rows = ["", "<details><summary>All Moodle events and filter decisions</summary>", "",
@@ -93,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
 
         tasks = select_tasks(events, now, settings.horizon_days)
         log.info("%d of %d Moodle events are actionable", len(tasks), len(events))
+        log.info("%s", _feed_reach(events, now, settings).lstrip("- ").replace("**", ""))
 
         client = None
         if not args.dry_run:
@@ -123,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             [
                 "### Moodle → Todoist",
                 f"- {len(tasks)} upcoming tasks in Moodle",
+                _feed_reach(events, now, settings),
                 f"- created **{len(report.created)}**, deadline moved **{len(report.rescheduled)}**, "
                 f"updated **{len(report.updated)}**, unchanged {report.unchanged}",
             ]

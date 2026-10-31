@@ -75,7 +75,7 @@ jobs:
           MOODLE_ICAL_URL: ${{ secrets.MOODLE_ICAL_URL }}
           TODOIST_API_TOKEN: ${{ secrets.TODOIST_API_TOKEN }}
           TODOIST_PROJECT: ${{ vars.TODOIST_PROJECT || 'University' }}
-          HORIZON_DAYS: ${{ vars.HORIZON_DAYS || '60' }}
+          HORIZON_DAYS: ${{ vars.HORIZON_DAYS || '180' }}
         run: |
           python -m moodle_sync
           # Only a successful sync counts for the day; a failure is retried at the next check-in.

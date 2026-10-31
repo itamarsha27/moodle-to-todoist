@@ -97,7 +97,7 @@ class Settings:
             ical_url=ical_url,
             base_url=base_url,
             tz=tz,
-            horizon_days=_env_int("HORIZON_DAYS", 60),
+            horizon_days=_env_int("HORIZON_DAYS", 180),
             prune_after_days=_env_int("PRUNE_AFTER_DAYS", 30),
             http_timeout=_env_int("HTTP_TIMEOUT", 30),
             state_path=_path("STATE_PATH", "data/synced_tasks.json"),

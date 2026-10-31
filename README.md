@@ -109,6 +109,10 @@ Existing tasks move to the renamed section automatically on the next run.
 To change one, do it in Todoist (**Labels** → ⋯ → **Edit** → color); the sync never
 overrides your choice. Or pin colors in `COURSE_COLORS` in `moodle_sync/rules.py`.
 
+**How far ahead does it look?** Up to 180 days. But Moodle itself only exports as far
+ahead as your university allows (often about 60 days), and lecturers usually publish
+assignments only a week or two ahead. Each run's summary shows how far Moodle actually reached.
+
 **Different time or timezone?** Repo **Settings → Secrets and variables → Actions →
 Variables** tab → add `RUN_HOUR` (e.g. `8`) and/or `TIMEZONE` (e.g. `Europe/London`).
 
